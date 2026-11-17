@@ -1,35 +1,48 @@
 import { router } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 
-import { WELLNESS_NOTE } from '@/content/copy';
+import { LANGUAGES } from '@/i18n/strings';
+import { useI18n } from '@/i18n/useI18n';
 import { useSettings } from '@/settings/useSettings';
 import { useTheme } from '@/theme/useTheme';
 import { AppText } from '@/ui/AppText';
 import { Button } from '@/ui/Button';
+import { Chip } from '@/ui/Chip';
+import { Screen } from '@/ui/Screen';
 
 export default function Welcome() {
-  const { color, space } = useTheme();
+  const { space } = useTheme();
+  const { t, lang } = useI18n();
   const set = useSettings((s) => s.set);
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: color.bg }}>
+    <Screen>
       <View style={[styles.body, { padding: space.gutter, gap: space.lg }]}>
-        <AppText variant="h1" accessibilityRole="header">
-          Welcome to DailyMudra
-        </AppText>
-        <AppText>A quiet place to practice five classic hand mudras, a few minutes a day.</AppText>
-        <AppText muted>{WELLNESS_NOTE}</AppText>
+        <Animated.View entering={FadeInDown.duration(500)}>
+          <AppText variant="h1" accessibilityRole="header">
+            {t('welcomeTitle')}
+          </AppText>
+        </Animated.View>
+        <Animated.View entering={FadeInDown.duration(500).delay(120)} style={{ gap: space.lg }}>
+          <AppText>{t('welcomeTagline')}</AppText>
+          <AppText muted>{t('wellnessText')}</AppText>
+          <View style={{ flexDirection: 'row', gap: space.sm }}>
+            {LANGUAGES.map((l) => (
+              <Chip key={l.id} label={l.label} selected={lang === l.id} onPress={() => set({ language: l.id })} />
+            ))}
+          </View>
+        </Animated.View>
       </View>
-      <View style={{ padding: space.gutter }}>
+      <Animated.View entering={FadeIn.duration(500).delay(300)} style={{ padding: space.gutter }}>
         <Button
-          label="Begin"
+          label={t('begin')}
           onPress={() => {
             set({ welcomeSeen: true });
             router.replace('/');
           }}
         />
-      </View>
-    </SafeAreaView>
+      </Animated.View>
+    </Screen>
   );
 }
 

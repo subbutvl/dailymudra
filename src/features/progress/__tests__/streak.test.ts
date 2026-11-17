@@ -1,4 +1,4 @@
-import { addDays, formatClock, localDay, spokenRemaining } from '@/lib/time';
+import { addDays, formatClock, greetingKey, localDay, remainingParts } from '@/lib/time';
 import { currentStreak, longestStreak } from '../streak';
 
 describe('streaks', () => {
@@ -49,9 +49,15 @@ describe('time helpers', () => {
     expect(formatClock(-5)).toBe('00:00');
   });
 
-  it('speaks remaining time', () => {
-    expect(spokenRemaining(522_000)).toBe('8 minutes 42 seconds left');
-    expect(spokenRemaining(60_000)).toBe('1 minute left');
-    expect(spokenRemaining(0)).toBe('0 seconds left');
+  it('splits remaining time for spoken labels', () => {
+    expect(remainingParts(522_000)).toEqual({ m: 8, s: 42 });
+    expect(remainingParts(59_001)).toEqual({ m: 1, s: 0 });
+    expect(remainingParts(0)).toEqual({ m: 0, s: 0 });
+  });
+
+  it('picks a greeting by hour', () => {
+    expect(greetingKey(new Date(2026, 0, 1, 6))).toBe('greetingMorning');
+    expect(greetingKey(new Date(2026, 0, 1, 13))).toBe('greetingAfternoon');
+    expect(greetingKey(new Date(2026, 0, 1, 20))).toBe('greetingEvening');
   });
 });

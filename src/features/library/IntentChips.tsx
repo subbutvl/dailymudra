@@ -1,6 +1,7 @@
 import { ScrollView, StyleSheet } from 'react-native';
 
 import { INTENTS, type IntentFilter } from '@/content/mudras';
+import { useI18n } from '@/i18n/useI18n';
 import { Chip } from '@/ui/Chip';
 
 interface Props {
@@ -9,7 +10,11 @@ interface Props {
 }
 
 export function IntentChips({ value, onChange }: Props) {
-  const options: { id: IntentFilter; label: string }[] = [{ id: 'all', label: 'All' }, ...INTENTS];
+  const { t, intent } = useI18n();
+  const options: { id: IntentFilter; label: string }[] = [
+    { id: 'all', label: t('all') },
+    ...INTENTS.map((i) => ({ id: i.id, label: intent(i.id).label })),
+  ];
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
       {options.map((o) => (
@@ -18,7 +23,7 @@ export function IntentChips({ value, onChange }: Props) {
           label={o.label}
           selected={value === o.id}
           onPress={() => onChange(o.id)}
-          accessibilityLabel={`Filter: ${o.label}`}
+          accessibilityLabel={t('filter', { label: o.label })}
         />
       ))}
     </ScrollView>
