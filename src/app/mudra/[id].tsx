@@ -94,7 +94,12 @@ function DetailBody({ mudra }: { mudra: Mudra }) {
 
       <ScrollView contentContainerStyle={{ paddingHorizontal: space.gutter, paddingBottom: space.xl, gap: space.lg }}>
         <View style={styles.card}>
-          <Animated.View style={[cardStyle, frontStyle]} pointerEvents={showSteps ? 'none' : 'auto'}>
+          <Animated.View
+            style={[cardStyle, frontStyle]}
+            pointerEvents={showSteps ? 'none' : 'auto'}
+            importantForAccessibility={showSteps ? 'no-hide-descendants' : 'auto'}
+            accessibilityElementsHidden={showSteps}
+          >
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={t('showHow')}
