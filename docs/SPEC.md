@@ -1,6 +1,6 @@
 # DailyMudra: Product Specification & UX Architecture
 
-**Status:** Draft v0.1 for review · **Platform:** Android first (React Native + Expo) · **Backend:** none, fully offline
+**Status:** Draft v0.2 (kickoff answers + review fixes applied) · **Platform:** Android first (React Native + Expo) · **Backend:** none, fully offline
 
 DailyMudra is a calm, distraction-free companion for practicing hand mudras. A person picks a mudra, reads how to form it, and practices for a set time with a quiet breath-pacing cue. The app remembers how many minutes they have practiced and how many days in a row.
 
@@ -14,7 +14,7 @@ DailyMudra is a calm, distraction-free companion for practicing hand mudras. A p
 | C3 | High performance, accessible, clean, distraction-free. | No network, no analytics, no ads, no sign-in. TalkBack and font scaling are first-class requirements (see §1.4). |
 | C4 | Self-contained, no external backend. | All state lives on device in SQLite (§3.3). |
 
-**Out of scope for v1:** accounts, cloud sync, reminders/notifications (open question Q3), audio guidance, custom mudras, iOS polish, tablets.
+**Out of scope for v1:** accounts, cloud sync, daily practice reminders, voice/audio guidance, custom mudras, iOS polish, tablets. (A single local "session complete" notification and an end chime **are** in scope, see §1.2.)
 
 ---
 
@@ -70,7 +70,8 @@ Finger to element mapping used across the app (traditional Ayurvedic mapping): t
 
 #### Principles
 
-1. **Wall-clock based, not tick based.** The engine stores timestamps, never "seconds remaining decremented by an interval". A JS interval drifts and stops when the app is backgrounded; timestamps do not. Remaining time is always *derived*: `remaining = endsAt - now`.
+1. **Timestamp based, not tick based.** The engine stores timestamps, never "seconds remaining decremented by an interval". A JS interval drifts and stops when the app is backgrounded; timestamps do not. Remaining time is always *derived*: `remaining = endsAt - now`.
+   - **Clock-change guard.** While the app is in the foreground, every tick compares the wall-clock delta (`Date.now()`) with the monotonic delta (`performance.now()`) since the previous tick. If they disagree by more than 2 s, the device clock was changed, and `startedAt`/`endsAt` are shifted by the difference so the session neither jumps to "completed" nor stretches. In the background no JS runs, so a clock change there cannot be detected; the scheduled end notification uses the same wall clock, so the two at least stay consistent. Accepted for v1.
 2. **One pure reducer, one thin hook.** All transitions live in a pure `sessionReducer(state, event)` that is unit tested without React Native. A `useSessionTimer` hook wires it to the clock, `AppState`, keep-awake and persistence.
 3. **The screen re-renders at most once per second**, and only the dial and time label subscribe to the tick.
 
@@ -78,7 +79,7 @@ Finger to element mapping used across the app (traditional Ayurvedic mapping): t
 
 ```
             START(durationSec)
-   ┌──────┐ ───────────────▶ ┌─────────┐   PAUSE / app→background   ┌────────┐
+   ┌──────┐ ───────────────▶ ┌─────────┐        PAUSE (user only)    ┌────────┐
    │ idle │                  │ running │ ─────────────────────────▶ │ paused │
    └──────┘                  └─────────┘ ◀───────────────────────── └────────┘
                                │     │            RESUME                 │
@@ -95,15 +96,16 @@ Finger to element mapping used across the app (traditional Ayurvedic mapping): t
 type SessionState =
   | { status: 'idle' }
   | { status: 'running';   mudraId; plannedSec; startedAt; endsAt; pausedTotalMs }
-  | { status: 'paused';    mudraId; plannedSec; startedAt; remainingMs; pausedAt; pausedTotalMs; pauseReason: 'user' | 'interruption' }
+  | { status: 'paused';    mudraId; plannedSec; startedAt; remainingMs; pausedAt; pausedTotalMs }
   | { status: 'completed'; mudraId; plannedSec; practicedSec; startedAt; endedAt }
   | { status: 'ended';     mudraId; plannedSec; practicedSec; startedAt; endedAt };
 
 type SessionEvent =
   | { type: 'START'; mudraId; plannedSec; now }
-  | { type: 'PAUSE'; now; reason: 'user' | 'interruption' }
+  | { type: 'PAUSE'; now }           // user only; the app never auto-pauses
   | { type: 'RESUME'; now }          // endsAt = now + remainingMs
   | { type: 'TICK'; now }            // only transitions when now ≥ endsAt
+  | { type: 'CLOCK_SHIFT'; deltaMs } // from the clock-change guard; shifts startedAt/endsAt
   | { type: 'END_EARLY'; now }
   | { type: 'RESET' };
 ```
@@ -115,19 +117,27 @@ type SessionEvent =
 
 #### Interruptions and pauses
 
+**Policy (decided): the session keeps counting no matter what the screen or app does. Only the person can pause it.** Pausing when the screen dims or the person switches apps would break immersion during a long practice.
+
 | Situation | Behavior |
 |---|---|
-| Person taps Pause | `PAUSE(reason:'user')`. Dial freezes, breath cue stops and shows "Paused". |
-| Incoming call, app switch, or notification shade opened (`AppState` → `background`) | `PAUSE(reason:'interruption')`. On return, the screen shows "Paused while you were away" with **Resume** and **End**. We auto-pause rather than keep counting, because a practice that was interrupted was not practice. (Default; see Q3.) |
-| `AppState` → `inactive` only (brief system overlay) | Ignored. Only `background` pauses, to avoid false pauses. |
-| Screen would time out | Prevented with `expo-keep-awake` while `running`. Released on pause, end and unmount. Brightness is not changed. |
-| Back gesture / hardware back during `running` or `paused` | Opens a small confirm sheet: "End session? You've practiced 4 min." **Keep going** (default, focused) / **End session**. |
-| App killed or crashed mid-session | The in-flight session is check-pointed to the KV store on every state change (`startedAt`, `plannedSec`, `pausedTotalMs`, status). On next launch, if a checkpoint exists, it is closed as `ended` with practiced time calculated up to the last checkpoint, and credited. No resume prompt (keeps launch calm). |
-| Device clock changed during a session | `practicedSec` is clamped to `[0, plannedSec]`. Uses `Date.now()`; accuracy within ±1 s is acceptable. |
+| Person taps Pause | `PAUSE`. Dial freezes, breath cue stops and shows "Paused". The scheduled end notification is cancelled. |
+| Resume | `RESUME`. `endsAt = now + remainingMs`; the end notification is rescheduled for the new `endsAt`. |
+| Session starts | A local notification "Gyan · 10 minutes complete" is scheduled for `endsAt` (`expo-notifications`, exact-time trigger) on the `session-complete` channel, which carries the chime sound and a gentle vibration pattern. |
+| Screen turns off, app switch, call, notification shade (`AppState` → `background`, or Android `blur`) | **Nothing changes.** The timer keeps running from its timestamps; the breath cue simply is not visible. No JS runs in the background; the OS delivers the scheduled notification at `endsAt`. |
+| Return to the app before `endsAt` | First render reads the clock, so the dial is already correct. Breath cue restarts. |
+| Return to the app after `endsAt` | The first `TICK` sees `now ≥ endsAt` and transitions to `completed` (credited for the full planned time). The notification has already played the chime, so it is dismissed and no second chime plays. |
+| Screen would time out while the app is open | Prevented with `expo-keep-awake` while `running`. Released on pause, end and unmount. Brightness is not changed. If the person turns the screen off with the power button, that is fine (see above). |
+| Back gesture / hardware back during `running` or `paused` | Opens a small confirm sheet: "End session? You've practiced 4 min." **Keep going** (default, focused) / **End session**. Ending cancels the scheduled notification. |
+| Process killed by Android while backgrounded | The session is not lost: it lives in the kv-store checkpoint (`mudraId`, `startedAt`, `endsAt`, `plannedSec`, `pausedTotalMs`, `status`, `elapsedMs`, `checkpointAt`, `appState`) and the notification is held by the OS. On next launch: if `now ≥ endsAt`, the session is recorded as `completed`; if not, the Practice screen reopens and continues running. |
+| App crashes while in the foreground | Recovery credits only the last checkpointed `elapsedMs` and records the session as `ended` (never time after the crash). While running, the checkpoint is rewritten every **15 s** and on every transition, so at most 15 s of practice is lost. The pending notification is cancelled. |
+| Notification permission denied (Android 13+) | The session works the same; only the background alert is missing. Detail screen shows a one-line hint once: "Allow notifications to hear the chime when the app is in the background." |
+| Device clock changed during a session | Handled by the clock-change guard in Principle 1. `practicedSec` is also clamped to `[0, plannedSec]` as a final safety net. |
 
 #### Completion state
 
-- When `now ≥ endsAt`, the engine fires `completed`, writes the session row, releases keep-awake, and triggers a single gentle haptic (`Haptics.notificationAsync(Success)`) if haptics are enabled. No sound in v1.
+- When `now ≥ endsAt` with the app in the foreground, the engine fires `completed`, writes the session row, releases keep-awake, cancels the pending notification, then plays a **soft chime** (bundled ~2 s audio via `expo-audio`, respecting the media volume) followed by **one gentle vibration** (`Haptics.notificationAsync(Success)`). Each can be turned off in Settings. A chime is chosen so someone practicing with closed eyes knows the session ended; the vibration gives silent physical feedback.
+- With the app in the background, the scheduled notification delivers the same chime and vibration through its channel.
 - The Practice screen swaps in place to the **Completion** layout (§2.4). No navigation transition.
 - **Crediting rule:** a session is saved if `practicedSec ≥ 60`. Completed and ended-early sessions both count toward total minutes. Shorter sessions are discarded silently.
 
@@ -149,7 +159,7 @@ CREATE TABLE sessions (
 CREATE INDEX idx_sessions_day ON sessions(local_day);
 ```
 
-Settings and small UI state (intent filter, durations per mudra, haptics on/off, breath pattern, disclaimer seen, in-flight checkpoint) live in `expo-sqlite/kv-store`.
+Settings and small UI state (intent filter, durations per mudra, chime/haptics on/off, breath pattern, disclaimer seen, in-flight session checkpoint described in §1.2) live in `expo-sqlite/kv-store`.
 
 The session log is the **single source of truth**. Totals and streaks are derived, never stored as counters that could drift.
 
@@ -185,11 +195,78 @@ Queries run once at app start and after each saved session, then cached in a sma
 - Cold start to interactive Home: < 1.5 s on a mid-range Android device (e.g. Pixel 6a class).
 - Practice screen: 60 fps breath cue with the JS thread idle between 1 s ticks.
 - APK/AAB download size: < 25 MB. Each gesture image ≤ 150 KB WebP.
-- Zero network requests. The app requests no runtime permissions in v1.
+- Zero network requests. The only runtime permission is `POST_NOTIFICATIONS` (Android 13+), asked the first time the person taps **Start practice**, with a one-line reason. Exact alarms use `SCHEDULE_EXACT_ALARM`/`USE_EXACT_ALARM` as allowed for timer apps; if exact alarms are unavailable the notification may arrive up to a minute late, which is acceptable.
+- Fonts: only the weights listed in §2.0 are bundled (4 files, < 300 KB total).
 
 ---
 
 ## Phase 2: Screen Architecture & UX Flow
+
+### 2.0 Design tokens (decided at kickoff)
+
+#### Colour: "Earthy Harmony" palette
+
+| Token | Hex | Role |
+|---|---|---|
+| `color.bg` | `#E2DFDA` | Primary app background. Soft warm off-white, no harsh white glare. |
+| `color.surface` | `#CBDED3` | Cards, list rows, grouped text blocks, the timer module on light screens, gesture image panel. |
+| `color.accent` | `#3B6255` | Primary buttons, selected chips, active states, structural lines of mudra line art. |
+| `color.accentMuted` | `#8BA49A` | Secondary icons, dividers, dial track, breath circle. **Decorative only on light screens** (see contrast). |
+| `color.warm` | `#D2C49E` | Achievements: streak count, completion badge, highlighted element pills (Fire, Air…). Always a **fill** with ink text, never text itself. |
+| `color.ink` | `#1F2B27` | *Added.* Primary text. The palette has no text colour; this is a near-black tinted toward the eucalyptus green. |
+| `color.inkMuted` | `#4A5652` | *Added.* Secondary text (subtitles, captions). |
+| `color.onAccent` | `#FFFFFF` | Text/icons on `accent` buttons. |
+| `color.night` | `#14201C` | *Added.* Practice screen background: the eucalyptus green taken almost to black, so the dark screen still belongs to the palette. |
+| `color.nightSurface` | `#1C2B26` | *Added.* Raised elements on the Practice screen (sheets, paused buttons). |
+| `color.nightText` | `#E2DFDA` | Timer digits and text on Practice (`bg` reused). |
+
+The app stays **light everywhere except the Practice screen**, which is always dark. It does not follow system dark mode in v1 (tokens are structured so a dark theme can be added later).
+
+**Contrast check (WCAG 2.x ratios, computed):**
+
+| Foreground on background | Ratio | Allowed use |
+|---|---|---|
+| ink on bg / on surface | 11.0 / 10.4 | All text |
+| inkMuted on bg / on surface | 5.8 / 5.4 | All text |
+| accent on bg / on surface | 5.2 / 4.9 | Text, links, icons, chip outlines |
+| white on accent | 6.9 | Button labels |
+| ink on warm | 8.5 | Streak/achievement text on sand fill |
+| accent on warm | 4.0 | Large text (≥ 18 sp bold / 24 sp) and icons only |
+| accentMuted on bg | **2.0** | **Not** for text or meaningful icons; decorative tracks/dividers only |
+| warm on bg | **1.3** | Never as text; warm fills need an ink label or accent border |
+| nightText on night | 12.6 | Timer digits, all Practice text |
+| accentMuted on night | 6.3 | Dial track, breath circle, secondary Practice text |
+| surface (mint) on night | 11.9 | Breath circle fill (at reduced opacity), icons |
+| accent on night | **2.5** | Not used on Practice; too dark |
+
+#### Typography: Outfit + Geist
+
+| Token | Font | Size / line height (sp) | Use |
+|---|---|---|---|
+| `type.display` | Outfit SemiBold 600 | 64 / 72, tabular figures | Countdown digits |
+| `type.h1` | Outfit SemiBold 600 | 28 / 34 | Mudra name on Detail, Completion title |
+| `type.h2` | Outfit Medium 500 | 20 / 26 | Mudra name on cards, section titles |
+| `type.overline` | Outfit Medium 500 | 13 / 18, +0.8 letter-spacing, caps | Section headers ("HOW TO FORM IT") |
+| `type.body` | Geist Regular 400 | 16 / 24 | Steps, benefits, descriptions |
+| `type.bodyStrong` | Geist Medium 500 | 16 / 24 | Buttons, chips, emphasis |
+| `type.caption` | Geist Regular 400 | 13 / 18 | Element tags, meta |
+
+- Bundled weights only: Outfit 500 + 600, Geist 400 + 500 (from `@expo-google-fonts/outfit` and `@expo-google-fonts/geist`, loaded with `expo-font` before the splash hides).
+- **Timer digits:** use `fontVariant: ['tabular-nums']`. If Outfit's figures turn out not to be tabular on Android, each digit is rendered in a fixed-width box so `08:42` → `08:41` never shifts horizontally. Verify in M0.
+- **Sanskrit names:** shown as transliteration (in Outfit) plus Devanagari as a subtitle. Neither Outfit nor Geist has Devanagari glyphs, so Devanagari falls back to the system Noto Sans Devanagari, which is fine for a subtitle.
+- All sizes are `sp`, so they scale with the system font setting.
+
+#### Spacing, radius, elevation
+
+- Spacing scale (dp): 4, 8, 12, 16, 24, 32, 48. Screen gutter 24.
+- Radius: 12 for cards and image panels, 999 for chips and the primary CTA, 16 for sheets.
+- No drop shadows; surfaces are separated by `surface` colour on `bg`, which keeps the look flat and calm.
+
+#### Gesture imagery
+
+- Style: minimalist **line art** of the hand, strokes in `accent #3B6255` on a `surface #CBDED3` panel. Fingers that carry the gesture's elements may be filled with `warm #D2C49E` at low opacity.
+- Delivered as SVG source, exported to WebP (see §3.4). Generated later with an AI image tool.
+- **Until then, placeholders:** a `surface` rounded panel containing the mudra's initial ("G", "P", "A", "V", "S") in Outfit 600, `accent` colour, plus a thin `accentMuted` ring. Same size and alt text as the final image, so swapping in real art changes no layout.
 
 ### 2.1 Navigation map
 
@@ -248,7 +325,7 @@ Routes (expo-router): `/` Home, `/mudra/[id]` Detail, `/practice/[id]` Practice 
 └────────────────────────────────────┘
 ```
 
-- Light theme. One column, generous 24 dp gutters, no bottom tab bar (only one primary destination).
+- `bg` canvas, cards on `surface`, selected chip filled `accent` with white label, unselected chips outlined `accent`. The streak figure sits on a small `warm` pill. One column, 24 dp gutters, no bottom tab bar (only one primary destination).
 - First-ever launch: the progress strip reads "Your practice starts today" instead of zeros.
 - TalkBack order: title → settings → progress strip (read as one sentence, "12 minutes today, 4 day streak, 186 minutes total") → chips → sections.
 - Implementation: a plain `ScrollView` with sections. Virtualised lists are unnecessary for five rows and cost startup time.
@@ -302,7 +379,7 @@ Routes (expo-router): `/` Home, `/mudra/[id]` Detail, `/practice/[id]` Practice 
 
 **Running**
 ```
-┌────────────────────────────────────┐  background: deep night (e.g. #0F1416),
+┌────────────────────────────────────┐  background: night #14201C,
 │ ✕                        Gyan      │  status bar hidden, nav bar dimmed.
 │                                    │  ✕ = End (opens confirm sheet)
 │        ┌──────────────────┐        │
@@ -325,7 +402,7 @@ Routes (expo-router): `/` Home, `/mudra/[id]` Detail, `/practice/[id]` Practice 
 └────────────────────────────────────┘
 ```
 
-- **Breath cue spec:** default rhythm *inhale 4 s → exhale 6 s* (a calming, longer exhale), looping. The circle scales between 0.6 and 1.0 with an ease-in-out curve. Opacity range 0.35 to 0.6, so it is soft in a dark room. Rhythm is selectable in Settings (see Q4).
+- **Breath cue spec (decided):** a softly expanding and shrinking circle inside the dial, *inhale 4 s → exhale 6 s*, looping, the same for all 5 mudras. The circle scales between 0.6 and 1.0 with an ease-in-out curve, filled `surface #CBDED3` at 0.35 to 0.6 opacity so it is soft in a dark room. Dial track is `accentMuted #8BA49A`, the remaining-time arc is `surface`, digits are `nightText` in `type.display`. Rhythm can be changed in Settings for people who need it.
 - The breath cue lives inside the dial so the eye has **one** focal point. The gesture image sits above as a reference and can be hidden with a tap ("Hide image" in Settings for those who know the pose).
 - Nothing else moves. No progress percentages, no quotes, no streak reminders during practice.
 
@@ -339,7 +416,7 @@ Routes (expo-router): `/` Home, `/mudra/[id]` Detail, `/practice/[id]` Practice 
 │   │   End    │   │  ▶ Resume    │  │  Resume = primary, End = secondary
 │   └──────────┘   └──────────────┘  │
 ```
-If paused by interruption, the label reads "Paused while you were away".
+The app never pauses on its own (see §1.2), so "Paused" only ever follows the person's own tap.
 
 **Completion (same screen, swapped in place)**
 ```
@@ -368,7 +445,9 @@ Ended-early sessions show "4 minutes of Gyan" with the same layout (no guilt cop
 │ PRACTICE                           │
 │ Breath rhythm         4 · 6     ›  │  options: 4·4, 4·6, 4·7·8, Off
 │ Haptic breath taps         [ ○ ]   │
-│ Haptic on completion       [ ● ]   │
+│ Chime on completion        [ ● ]   │
+│ Vibrate on completion      [ ● ]   │
+│ Notifications           Allowed ›  │  opens system settings if denied
 │ Show gesture image in practice[●]  │
 │ PROGRESS                           │
 │ Reset progress                  ›  │  confirm dialog
@@ -385,8 +464,8 @@ Ended-early sessions show "4 minutes of Gyan" with the same layout (no guilt cop
 3. Tap **Gyan** card → Detail.
 4. Read steps, keep the remembered 10 min, tap **Start practice**.
 5. Practice screen opens dark; timer starts immediately; screen stays awake.
-6. Follow the breath cue; a call comes in → session auto-pauses; return → **Resume**.
-7. Timer reaches 0 → gentle haptic → Completion shows updated streak.
+6. Follow the breath cue; the screen turns off or a call comes in → the timer keeps running.
+7. Timer reaches 0 → soft chime + one vibration (as a notification if the app is in the background) → Completion shows the updated streak.
 8. **Done** → Home, strip shows new totals.
 
 ---
@@ -420,10 +499,12 @@ Conclusion: nothing about this app favors switching. Expo stays.
 | Breath cue | `react-native-reanimated` (`withRepeat`, `useReducedMotion`) | Runs on the UI thread, so the JS 1 s tick cannot stutter it |
 | Keep screen on | `expo-keep-awake` | Only during `running` |
 | Haptics | `expo-haptics` | Completion + optional breath taps |
+| End-of-session alert | `expo-notifications` (local only, no push service) | Scheduled at `endsAt`, delivered by the OS even if the app is backgrounded or killed |
+| Chime | `expo-audio` | Plays the bundled chime when completion happens in the foreground |
 | Persistence | `expo-sqlite` + `expo-sqlite/kv-store` | One storage engine for both the log and settings, works in Expo Go, no extra native module |
 | App-wide state | `zustand` (third party, ~1 KB) | Settings + derived progress cache; selector subscriptions avoid needless renders |
 | Safe areas / system bars | `react-native-safe-area-context`, `expo-system-ui`, `expo-navigation-bar` | Immersive Practice screen |
-| Fonts | System Roboto by default (no bundle cost); `expo-font` only if Q2 picks a custom face | |
+| Fonts | `expo-font` + `@expo-google-fonts/outfit`, `@expo-google-fonts/geist` | Outfit for headings/digits, Geist for body (§2.0) |
 | Testing | Jest + `@testing-library/react-native`; reducer & streak logic as pure unit tests | |
 
 Deliberately **not** used: Redux (overkill), react-native-mmkv (needs a dev build for a gain we will not notice at this data size), Lottie (no animation), FlashList (5 rows).
@@ -438,9 +519,11 @@ Three layers, each with one job:
 │   ├─ useReducer(sessionReducer)       ← pure, unit-tested FSM      │
 │   ├─ useNow(1000) while running       ← 1 s clock, aligned to the  │
 │   │                                      next whole second         │
-│   ├─ AppState listener                ← background → PAUSE         │
+│   ├─ clock-change guard (wall vs monotonic) → CLOCK_SHIFT          │
+│   ├─ AppState listener   ← only to restart the breath cue on return│
 │   ├─ keep-awake on/off by status                                   │
-│   ├─ checkpoint to kv-store on each transition                     │
+│   ├─ schedule / cancel end notification on START, PAUSE, RESUME, END│
+│   ├─ checkpoint to kv-store on each transition + every 15 s        │
 │   └─ on completed/ended → sessionRepo.save() → progressStore.refresh() │
 │                                                                    │
 │  <CountdownDial remainingMs plannedMs />   re-renders 1×/s         │
@@ -462,7 +545,8 @@ Bundled, read-only                        On-device, read-write
 ──────────────────                        ─────────────────────
 src/content/mudras.ts  (typed constants)  SQLite: dailymudra.db
 assets/mudras/*.webp   (5 × @1x/@2x/@3x)    └─ sessions table
-assets/fonts/ (optional)                  kv-store (same DB file)
+assets/sounds/chime.ogg (also android res  kv-store (same DB file)
+  /raw for the notification channel)
                                             ├─ settings.*
                                             ├─ home.intent
                                             ├─ duration.<mudraId>
@@ -473,7 +557,7 @@ assets/fonts/ (optional)                  kv-store (same DB file)
 - Images: square, 840×840 source, exported as WebP at 1×/2×/3× and referenced via `require()`, so Metro picks the right density. `expo-image` with `cachePolicy="memory"` and a solid placeholder colour, so there is no layout jump.
 - A `sessionRepo` module is the only code that touches SQL (`save`, `getStats`, `reset`), so storage could be swapped later without touching screens.
 
-### 3.5 Proposed directory structure (to confirm in Q5)
+### 3.5 Directory structure (feature-based)
 
 ```
 dailymudra/
@@ -494,7 +578,7 @@ dailymudra/
 │  ├─ theme/                    # tokens.ts (color, type, space, radius), useTheme
 │  ├─ ui/                       # Button, Chip, Text, Screen primitives
 │  └─ lib/                      # time formatting, a11y helpers
-├─ assets/mudras/ · assets/fonts/
+├─ assets/mudras/ · assets/sounds/   (fonts come from @expo-google-fonts packages)
 ├─ docs/SPEC.md
 └─ __tests__/ (or colocated *.test.ts)
 ```
@@ -503,19 +587,31 @@ dailymudra/
 
 | Milestone | Scope | Done when |
 |---|---|---|
-| **M0 Foundations** | Expo app (TypeScript), router, theme tokens from Q1/Q2, UI primitives, lint/format, Jest | App boots to an empty Home on an Android device |
-| **M1 Library** | `mudras.ts`, placeholder images, Home list + intent chips, Detail screen | Can browse and filter all 5 mudras with TalkBack |
-| **M2 Timer engine** | `sessionReducer` + tests, `useSessionTimer`, dial, pause/resume/end, AppState, keep-awake, checkpointing | Reducer at 100% branch coverage; manual interruption test passes |
+| **M0 Foundations** | Expo app (TypeScript), router, theme tokens + fonts from §2.0 (verify tabular digits), UI primitives, lint/format, Jest | App boots to an empty Home on an Android device |
+| **M1 Library** | `mudras.ts`, initial-letter placeholders (§2.0), Home list + intent chips, Detail screen | Can browse and filter all 5 mudras with TalkBack |
+| **M2 Timer engine** | `sessionReducer` + tests, `useSessionTimer`, dial, pause/resume/end, clock-change guard, keep-awake, end notification + chime, checkpointing + recovery | Reducer at 100% branch coverage; manual tests pass: screen off, app switch, process killed in background, clock changed |
 | **M3 Persistence** | SQLite schema + migrations, `sessionRepo`, streak logic + tests (midnight, gaps, today-not-yet), progress strip, Completion | Stats correct across simulated days |
 | **M4 Breath cue & polish** | Reanimated cue, reduced-motion fallback, haptics, Settings, welcome + disclaimer | 60 fps on a mid-range device; reduced-motion path verified |
 | **M5 Release prep** | Final images, a11y audit (font 200%, contrast, TalkBack pass), size/start-up check, EAS build, Play internal testing track | AAB on internal track, budgets in §1.4 met |
 
 ---
 
-## Phase 4: Kickoff questions (answer before code)
+## Phase 4: Kickoff decisions (answered 2026-11-17)
 
-1. **Colour direction.** For the light screens (Home, Detail, Settings), which mood fits best? (a) *Warm earth*: sand background, terracotta accent, deep brown text. (b) *Cool sage*: off-white, muted sage green accent, slate text. (c) Something you have in mind (a hex or two is enough). The Practice screen will be a deep, low-glare dark tone in every option. Should the whole app also follow the system dark mode, or stay light outside Practice?
-2. **Typography.** System Roboto everywhere (zero size cost, best performance), or one bundled display face for headings and mudra names (e.g. a soft serif such as Lora or Fraunces) with Roboto for body text? Do you want Sanskrit names shown in Devanagari, transliteration only, or both?
-3. **Session behavior.** Are the presets 3/5/10/15/20 min (plus a 1–60 stepper) right? When the app goes to the background mid-session, should it auto-pause (current spec), or keep counting and show a "session complete" notification at the end (adds the notifications permission)? Any end-of-session sound, or haptic only?
-4. **Breath cue.** Is a softly expanding circle inside the timer dial the right visual, or would you prefer a different shape (e.g. a rising/falling line or a glowing ring)? Should the default rhythm be inhale 4 s / exhale 6 s for every mudra, or vary per mudra?
-5. **Imagery and structure.** Who will supply the 5 gesture images, and in what style (fine line illustration, flat silhouette, or photography)? I can build with neutral placeholders until they exist. Also: are you happy with the feature-based folder layout in §3.5, or do you prefer a layer-based one (`components/`, `screens/`, `hooks/`)?
+| # | Topic | Decision | Where in spec |
+|---|---|---|---|
+| 1 | Colour | "Earthy Harmony" palette with the role mapping given; light app, dark Practice screen. Text and night tokens added and contrast-checked. | §2.0 |
+| 2 | Typography | Outfit for headings, mudra names and timer digits; Geist for body text. | §2.0 |
+| 3 | Sessions | Presets 3/5/10/15/20 + 1–60 stepper. Timer keeps counting in the background, local notification at the end. Soft chime then gentle vibration. | §1.2 |
+| 4 | Breath cue | Expanding/shrinking circle inside the dial, 4 s in / 6 s out for all 5 mudras. | §2.4 |
+| 5 | Imagery & folders | Minimalist line art in `#3B6255` on `#CBDED3`, made later; typographic-initial placeholders until then. Feature-based folders. | §2.0, §3.5 |
+
+Assumptions made where the answers were silent (easy to change):
+- Sanskrit names show transliteration plus a Devanagari subtitle in the system font.
+- The app does not follow system dark mode in v1.
+- Users can still turn off the chime or vibration in Settings.
+
+## Changelog
+
+- **v0.2** – Applied kickoff decisions. Timer no longer auto-pauses; added end notification, chime, clock-change guard (wall vs monotonic), 15 s checkpoints and background-kill recovery (from review on PR #1). Added design tokens, contrast table and placeholder spec.
+- **v0.1** – Initial spec, wireframes and plan.
