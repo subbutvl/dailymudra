@@ -4,6 +4,19 @@
  * Tamil copy was machine-drafted; have a native speaker review before release.
  */
 const en = {
+  help: 'Help',
+  custom: 'Custom',
+  helpTitle: 'Help',
+  tabHow: 'How to practice',
+  tabWhen: 'When to practice',
+  tabWiki: 'Mudra wiki',
+  wikiOverview: 'About',
+  wikiElements: 'Elements',
+  wikiBestTime: 'Best time',
+  wikiDuration: 'How long',
+  wikiTips: 'Tips',
+  wikiCaution: 'Caution',
+  practiceThis: 'Practice {name}',
   greetingMorning: 'Good morning',
   greetingAfternoon: 'Good afternoon',
   greetingEvening: 'Good evening',
@@ -79,6 +92,19 @@ const en = {
 export type StringKey = keyof typeof en;
 
 const ta: Record<StringKey, string> = {
+  help: 'உதவி',
+  custom: 'தனிப்பயன்',
+  helpTitle: 'உதவி',
+  tabHow: 'செய்யும் முறை',
+  tabWhen: 'எப்போது செய்வது',
+  tabWiki: 'முத்திரைக் களஞ்சியம்',
+  wikiOverview: 'அறிமுகம்',
+  wikiElements: 'பூதங்கள்',
+  wikiBestTime: 'சிறந்த நேரம்',
+  wikiDuration: 'எவ்வளவு நேரம்',
+  wikiTips: 'குறிப்புகள்',
+  wikiCaution: 'எச்சரிக்கை',
+  practiceThis: '{name} பயிற்சி செய்',
   greetingMorning: 'காலை வணக்கம்',
   greetingAfternoon: 'மதிய வணக்கம்',
   greetingEvening: 'மாலை வணக்கம்',

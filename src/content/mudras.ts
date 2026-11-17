@@ -187,7 +187,8 @@ export const MUDRAS: Mudra[] = [
   },
 ];
 
-export const DURATION_PRESETS = [3, 5, 10, 15, 20] as const;
+/** Preset chips; any other length (1–60) comes from the custom stepper. */
+export const DURATION_PRESETS = [3, 5, 10, 15] as const;
 export const MIN_MINUTES = 1;
 export const MAX_MINUTES = 60;
 

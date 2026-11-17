@@ -55,6 +55,7 @@ function DetailBody({ mudra }: { mudra: Mudra }) {
   const remembered = useSettings((s) => s.durations[mudra.id]);
   const setDuration = useSettings((s) => s.setDuration);
   const minutes = remembered ?? mudra.suggestedMinutes;
+  const isCustom = !(DURATION_PRESETS as readonly number[]).includes(minutes);
   const [showSteps, setShowSteps] = useState(false);
   const reduceMotion = useReducedMotion();
 
@@ -92,9 +93,14 @@ function DetailBody({ mudra }: { mudra: Mudra }) {
         <IconButton glyph="‹" label={t('back')} color={color.accent} onPress={() => router.back()} />
       </View>
 
-      <ScrollView contentContainerStyle={{ paddingHorizontal: space.gutter, paddingBottom: space.xl, gap: space.lg }}>
+      <ScrollView contentContainerStyle={{ flexGrow: 1, paddingHorizontal: space.gutter, paddingBottom: space.xl, gap: space.lg }}>
         <View style={styles.card}>
-          <Animated.View style={[cardStyle, frontStyle]} pointerEvents={showSteps ? 'none' : 'auto'}>
+          <Animated.View
+            style={[cardStyle, frontStyle]}
+            pointerEvents={showSteps ? 'none' : 'auto'}
+            importantForAccessibility={showSteps ? 'no-hide-descendants' : 'auto'}
+            accessibilityElementsHidden={showSteps}
+          >
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={t('showHow')}
@@ -102,7 +108,7 @@ function DetailBody({ mudra }: { mudra: Mudra }) {
               onPress={toggle}
               style={styles.fill}
             >
-              <MudraImage mudra={mudra} size="100%" glyphSize={96} />
+              <MudraImage mudra={mudra} size="100%" height="100%" glyphSize={110} />
             </Pressable>
           </Animated.View>
           <Animated.View
@@ -111,7 +117,7 @@ function DetailBody({ mudra }: { mudra: Mudra }) {
             importantForAccessibility={showSteps ? 'auto' : 'no-hide-descendants'}
             accessibilityElementsHidden={!showSteps}
           >
-            <CardBack mudra={mudra} />
+            <CardBack mudra={mudra} onFlip={toggle} />
           </Animated.View>
         </View>
 
@@ -153,16 +159,27 @@ function DetailBody({ mudra }: { mudra: Mudra }) {
       {/* Sticky footer */}
       <View style={[styles.footer, { backgroundColor: color.bg, borderTopColor: color.accentMuted, padding: space.lg, gap: space.md }]}>
         <View style={styles.durationRow}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
+          <View style={styles.presets}>
             {DURATION_PRESETS.map((p) => (
               <Chip key={p} label={`${p}`} selected={minutes === p} onPress={() => pick(p)} accessibilityLabel={t('minutes', { n: p })} />
             ))}
-          </ScrollView>
+          </View>
           <View style={styles.stepper}>
             <IconButton glyph="−" label={t('oneLess')} color={color.accent} onPress={() => pick(minutes - 1)} />
-            <AppText variant="bodyStrong" accessibilityLabel={t('minutes', { n: minutes })} style={{ minWidth: 44, textAlign: 'center' }}>
-              {minutes}m
-            </AppText>
+            {/* Custom length: filled when it is not one of the presets. */}
+            <View
+              accessible
+              accessibilityLabel={`${t('custom')}: ${t('minutes', { n: minutes })}`}
+              accessibilityState={{ selected: isCustom }}
+              style={[
+                styles.customPill,
+                { borderColor: color.accent, borderRadius: radius.pill, backgroundColor: isCustom ? color.accent : 'transparent' },
+              ]}
+            >
+              <AppText variant="bodyStrong" style={{ color: isCustom ? color.onAccent : color.accent }}>
+                {minutes}m
+              </AppText>
+            </View>
             <IconButton glyph="+" label={t('oneMore')} color={color.accent} onPress={() => pick(minutes + 1)} />
           </View>
         </View>
@@ -172,17 +189,20 @@ function DetailBody({ mudra }: { mudra: Mudra }) {
   );
 }
 
-function CardBack({ mudra }: { mudra: Mudra }) {
+function CardBack({ mudra, onFlip }: { mudra: Mudra; onFlip: () => void }) {
   const { space } = useTheme();
   const { t, mudra: text } = useI18n();
   const m = text(mudra);
   return (
-    <ScrollView
-      nestedScrollEnabled
-      style={styles.fill}
-      contentContainerStyle={{ padding: space.xl, gap: space.md }}
-      showsVerticalScrollIndicator
-    >
+    <ScrollView nestedScrollEnabled style={styles.fill} showsVerticalScrollIndicator>
+      {/* A tap anywhere on the text flips back; a drag still scrolls. */}
+      <Pressable
+        onPress={onFlip}
+        accessibilityRole="button"
+        accessibilityLabel={t('showGesture')}
+        accessibilityHint={t('flipsCard')}
+        style={{ padding: space.xl, gap: space.md }}
+      >
       <AppText variant="overline" muted>
         {t('howToForm')}
       </AppText>
@@ -197,18 +217,22 @@ function CardBack({ mudra }: { mudra: Mudra }) {
       {m.benefits.map((b) => (
         <AppText key={b}>• {b}</AppText>
       ))}
+      </Pressable>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   topBar: { flexDirection: 'row', alignItems: 'center' },
-  // Fixed square card; the back face scrolls inside it when the text is long.
-  card: { width: '100%', aspectRatio: 1 },
+  // The card takes the free height (never less than a square); the back face scrolls inside it.
+  card: { width: '100%', flexGrow: 1, minHeight: 300 },
   face: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, overflow: 'hidden', backfaceVisibility: 'hidden' },
   fill: { flex: 1, width: '100%' },
   flipLink: { alignSelf: 'center', minHeight: 48, justifyContent: 'center' },
   footer: { borderTopWidth: StyleSheet.hairlineWidth },
-  durationRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  // Presets and the custom stepper share a line when they fit, and wrap on narrow phones.
+  durationRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', columnGap: 8, rowGap: 8 },
   stepper: { flexDirection: 'row', alignItems: 'center' },
+  customPill: { minWidth: 52, minHeight: 40, paddingHorizontal: 8, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
+  presets: { flexDirection: 'row', gap: 6 },
 });

@@ -1,6 +1,6 @@
 # DailyMudra: Product Specification & UX Architecture
 
-**Status:** Draft v0.4 (motion, mandala background and Tamil added) · **Platform:** Android first (React Native + Expo) · **Backend:** none, fully offline
+**Status:** Draft v0.5 (sticky Home header, Help & wiki, presets trimmed) · **Platform:** Android first (React Native + Expo) · **Backend:** none, fully offline
 
 DailyMudra is a calm, distraction-free companion for practicing hand mudras. A person picks a mudra, reads how to form it, and practices for a set time with a quiet breath-pacing cue. The app remembers how many minutes they have practiced and how many days in a row.
 
@@ -112,7 +112,7 @@ type SessionEvent =
 
 #### Durations
 
-- Presets on the Detail screen: **3, 5, 10, 15, 20 min**, defaulting to the mudra's `suggestedMinutes` (or the last value the person used for that mudra).
+- Presets on the Detail screen: **3, 5, 10, 15 min** plus a custom 1–60 stepper (v0.5 dropped 20), defaulting to the mudra's `suggestedMinutes` (or the last value the person used for that mudra).
 - A small "−/+" stepper allows 1 to 60 min in 1 min steps for anyone who wants a custom length. No free-text input.
 
 #### Interruptions and pauses
@@ -301,7 +301,7 @@ Routes (expo-router): `/` Home, `/mudra/[id]` Detail, `/practice/[id]` Practice 
 
 ```
 ┌────────────────────────────────────┐
-│ DailyMudra                     ⚙   │  app title (left), Settings (right, 48dp)
+│ DailyMudra                  ?  ⚙   │  app title (left), Help + Settings (right, 48dp)
 │                                    │
 │ Good morning                       │  time-of-day greeting, muted
 │ ┌────────────────────────────────┐ │
@@ -334,6 +334,7 @@ Routes (expo-router): `/` Home, `/mudra/[id]` Detail, `/practice/[id]` Practice 
 - `bg` canvas, cards on `surface`, selected chip filled `accent` with white label, unselected chips outlined `accent`. The streak figure sits on a small `warm` pill. One column, 24 dp gutters, no bottom tab bar (only one primary destination).
 - First-ever launch: the progress strip reads "Your practice starts today" instead of zeros.
 - TalkBack order: title → settings → progress strip (read as one sentence, "12 minutes today, 4 day streak, 186 minutes total") → chips → sections.
+- **Sticky header (v0.5):** title, greeting, progress strip and intent chips stay fixed; only the mudra list scrolls.
 - Implementation: a plain `ScrollView` with sections. Virtualised lists are unnecessary for five rows and cost startup time.
 
 ### 2.3 Mudra Detail (flip card, decided on the wireframes)
@@ -354,14 +355,18 @@ Routes (expo-router): `/` Home, `/mudra/[id]` Detail, `/practice/[id]` Practice 
 │ [Index · Air] [Thumb · Fire]       │  warm pills, ink text
 │ ⓘ caution (only if the mudra has one)
 ├────────────────────────────────────┤  ← sticky footer (always visible)
-│ (3)(5)[10](15)(20)     − 10m +     │  preset chips + 1–60 stepper
+│ (3)(5)[10](15)   − 10m + (custom)  │  preset chips + 1–60 custom stepper
 │ [        Start practice          ] │  Primary CTA, 56dp
 └────────────────────────────────────┘
 ```
 
-- Tapping the image or the "How to form it" link flips the card with a 450 ms 3D turn (instant with reduce-motion). The card keeps its square size; long steps scroll **inside** the card.
+- Tapping the image or the "How to form it" link flips the card with a 450 ms 3D turn (instant with reduce-motion). The card grows to fill the space above the footer (v0.5); long steps scroll **inside** the card. Tapping anywhere on the back (not dragging) flips it back to the image.
 - Element pills stay on **one line** and scroll horizontally when there are more than fit.
 - Duration choice is remembered per mudra. Notification permission is asked on the first **Start practice**.
+
+### 2.3a Help (v0.5)
+
+Reached from the **?** button in the Home header. Sticky header and three tabs: **How to** (posture, forming, breathing, finishing), **When to** (time of day, before/after meals, how often, when to skip) and **Wiki** (one expandable card per mudra: overview, elements, best time, duration, tips, caution, and a "Practice" button that opens its Detail screen). All copy lives in `src/content/help.ts` in English and Tamil.
 
 ### 2.4 Active Practice (dark, eyes-open)
 
@@ -542,6 +547,7 @@ dailymudra/
 │  │  ├─ index.tsx              # Home
 │  │  ├─ welcome.tsx
 │  │  ├─ settings.tsx
+│  │  ├─ help.tsx               # Help: How to · When to · Wiki
 │  │  ├─ mudra/[id].tsx         # Detail (flip card)
 │  │  └─ practice/[id].tsx      # Practice + Completion
 │  ├─ features/
@@ -578,7 +584,7 @@ dailymudra/
 |---|---|---|---|
 | 1 | Colour | "Earthy Harmony" palette with the role mapping given; light app, dark Practice screen. Text and night tokens added and contrast-checked. | §2.0 |
 | 2 | Typography | Outfit for headings, mudra names and timer digits; Geist for body text. | §2.0 |
-| 3 | Sessions | Presets 3/5/10/15/20 + 1–60 stepper. Timer keeps counting in the background, local notification at the end. Soft chime then gentle vibration. | §1.2 |
+| 3 | Sessions | Presets 3/5/10/15 + custom 1–60 stepper. Timer keeps counting in the background, local notification at the end. Soft chime then gentle vibration. | §1.2 |
 | 4 | Breath cue | Small expanding/shrinking circle below the gesture image, 4 s in / 6 s out for all 5 mudras. | §2.4 |
 | 5 | Imagery & folders | Minimalist line art in `#3B6255` on `#CBDED3`, made later; typographic-initial placeholders until then. Feature-based folders. | §2.0, §3.5 |
 
@@ -589,6 +595,7 @@ Assumptions made where the answers were silent (easy to change):
 
 ## Changelog
 
+- **v0.5** – Home header and filters are sticky; Detail card is taller and flips back from either side; presets 3/5/10/15 plus custom; Help screen (How to, When to, Wiki per mudra) reached from the Home header.
 - **v0.4** – Gentle transitions (C1 revised), animated flip, one-line scrolling element pills, breath ring without text, taller gesture placeholder, safe areas on every screen, steps scroll inside the card, mandala background, English + Tamil.
 - **v0.3** – Detail is a flip card (instant swap). Practice puts the gesture image first (~70% of the screen) with a small breath circle, a subtle time-left label and pause/play; the dial is dropped. Calm and vibrant palettes both live in theme tokens. Routes moved to `src/app/` (Expo SDK 58 default).
 - **v0.2** – Applied kickoff decisions. Timer no longer auto-pauses; added end notification, chime, clock-change guard (wall vs monotonic), 15 s checkpoints and background-kill recovery (from review on PR #1). Added design tokens, contrast table and placeholder spec.
