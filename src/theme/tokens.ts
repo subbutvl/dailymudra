@@ -29,6 +29,11 @@ export interface Palette {
   nightText: string;
   /** Secondary text and the breath circle on the Practice screen. */
   nightMuted: string;
+  /** Background mandala line colour + opacity (light screens / Practice). */
+  pattern: string;
+  patternOpacity: number;
+  nightPattern: string;
+  nightPatternOpacity: number;
 }
 
 export const palettes: Record<PaletteId, Palette> = {
@@ -45,6 +50,10 @@ export const palettes: Record<PaletteId, Palette> = {
     nightSurface: '#1C2B26',
     nightText: '#E2DFDA',
     nightMuted: '#8BA49A',
+    pattern: '#3B6255',
+    patternOpacity: 0.08,
+    nightPattern: '#8BA49A',
+    nightPatternOpacity: 0.07,
   },
   vibrant: {
     bg: '#F3EDE0',
@@ -59,6 +68,10 @@ export const palettes: Record<PaletteId, Palette> = {
     nightSurface: '#0F4A39',
     nightText: '#F3EDE0',
     nightMuted: '#B4E4C9',
+    pattern: '#E2B84A',
+    patternOpacity: 0.22,
+    nightPattern: '#E2B84A',
+    nightPatternOpacity: 0.1,
   },
 };
 

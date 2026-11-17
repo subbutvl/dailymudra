@@ -1,11 +1,14 @@
+import { getLocales } from 'expo-localization';
 import { create } from 'zustand';
 
 import { kvGet, kvSet } from '@/db/kv';
 import type { IntentFilter } from '@/content/mudras';
+import type { Lang } from '@/i18n/strings';
 import type { PaletteId } from '@/theme/tokens';
 
 export interface Settings {
   palette: PaletteId;
+  language: Lang;
   homeIntent: IntentFilter;
   /** Last duration (minutes) chosen per mudra. */
   durations: Record<string, number>;
@@ -18,6 +21,7 @@ export interface Settings {
 
 const DEFAULTS: Settings = {
   palette: 'calm',
+  language: deviceLanguage(),
   homeIntent: 'all',
   durations: {},
   hapticsOnComplete: true,
@@ -56,4 +60,12 @@ export const useSettings = create<SettingsStore>((set, get) => ({
 function persist(s: SettingsStore) {
   const { hydrated: _h, hydrate: _hy, set: _s, setDuration: _sd, ...data } = s;
   kvSet(KEY, data);
+}
+
+function deviceLanguage(): Lang {
+  try {
+    return getLocales()[0]?.languageCode === 'ta' ? 'ta' : 'en';
+  } catch {
+    return 'en';
+  }
 }

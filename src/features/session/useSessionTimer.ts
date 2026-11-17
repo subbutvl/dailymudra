@@ -1,9 +1,10 @@
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import * as Haptics from 'expo-haptics';
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
-import { AppState, AccessibilityInfo } from 'react-native';
+import { AppState } from 'react-native';
 
-import { getMudra } from '@/content/mudras';
+import { useI18n } from '@/i18n/useI18n';
+import { announce } from '@/lib/a11y';
 import { useProgress } from '@/features/progress/useProgress';
 import { saveSession } from '@/features/progress/sessionRepo';
 import { useSettings } from '@/settings/useSettings';
@@ -20,13 +21,20 @@ interface Options {
   plannedSec: number;
   /** State recovered from a checkpoint; when absent the session starts now. */
   restored?: SessionState;
+  /** Localized text for the end-of-session notification. */
+  notification: { title: string; body: string };
 }
 
 /**
  * Wires the pure reducer to the clock, AppState, keep-awake, the end
  * notification and persistence (docs/SPEC.md §3.3). Re-renders once per second.
  */
-export function useSessionTimer({ mudraId, plannedSec, restored }: Options) {
+export function useSessionTimer({ mudraId, plannedSec, restored, notification }: Options) {
+  const { t } = useI18n();
+  const notificationRef = useRef(notification);
+  useEffect(() => {
+    notificationRef.current = notification;
+  });
   const [state, dispatch] = useReducer(sessionReducer, idleState);
   const [now, setNow] = useState(() => Date.now());
   const saved = useRef(false);
@@ -80,9 +88,7 @@ export function useSessionTimer({ mudraId, plannedSec, restored }: Options) {
   // End notification follows the running state.
   useEffect(() => {
     if (state.status === 'running') {
-      const m = getMudra(state.mudraId);
-      const minutes = Math.round(state.plannedSec / 60);
-      scheduleEnd(state.endsAt, 'Session complete', `${m?.name ?? 'Practice'} · ${minutes} min`);
+      scheduleEnd(state.endsAt, notificationRef.current.title, notificationRef.current.body);
     } else if (state.status !== 'idle') {
       cancelEnd();
     }
@@ -126,9 +132,9 @@ export function useSessionTimer({ mudraId, plannedSec, restored }: Options) {
     useProgress.getState().refresh();
     if (state.status === 'completed') {
       if (hapticsOn) Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-      AccessibilityInfo.announceForAccessibility('Session complete');
+      announce(t('sessionComplete'));
     }
-  }, [state, hapticsOn]);
+  }, [state, hapticsOn, t]);
 
   // Whole-minute announcement for TalkBack (not a live region every second).
   const remaining = remainingMs(state, now);
@@ -137,12 +143,10 @@ export function useSessionTimer({ mudraId, plannedSec, restored }: Options) {
     if (state.status !== 'running') return;
     const minutesLeft = Math.ceil(remaining / 60000);
     if (lastAnnounced.current !== null && minutesLeft !== lastAnnounced.current && minutesLeft > 0) {
-      AccessibilityInfo.announceForAccessibilityWithOptions(`${minutesLeft} minute${minutesLeft === 1 ? '' : 's'} left`, {
-        queue: true,
-      });
+      announce(t('spokenMin', { m: minutesLeft }));
     }
     lastAnnounced.current = minutesLeft;
-  }, [remaining, state.status]);
+  }, [remaining, state.status, t]);
 
   const pause = useCallback(() => dispatch({ type: 'PAUSE', now: Date.now() }), []);
   const resume = useCallback(() => {

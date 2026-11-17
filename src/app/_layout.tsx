@@ -45,11 +45,18 @@ export default function RootLayout() {
       <Stack
         screenOptions={{
           headerShown: false,
-          animation: 'none', // C1: no screen transitions
+          // Gentle native transitions; Android turns them off when "Remove animations" is on.
+          animation: 'slide_from_right',
+          animationDuration: 280,
           contentStyle: { backgroundColor: color.bg },
         }}
       >
-        <Stack.Screen name="practice/[id]" options={{ gestureEnabled: false, contentStyle: { backgroundColor: color.night } }} />
+        <Stack.Screen name="index" options={{ animation: 'fade' }} />
+        <Stack.Screen name="welcome" options={{ animation: 'fade' }} />
+        <Stack.Screen
+          name="practice/[id]"
+          options={{ animation: 'fade', animationDuration: 450, gestureEnabled: false, contentStyle: { backgroundColor: color.night } }}
+        />
       </Stack>
     </SafeAreaProvider>
   );

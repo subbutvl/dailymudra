@@ -22,20 +22,15 @@ export function formatClock(ms: number): string {
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
-/** Spoken form for TalkBack: "8 minutes 42 seconds left". */
-export function spokenRemaining(ms: number): string {
+/** Whole minutes and seconds left, rounded up (for spoken labels). */
+export function remainingParts(ms: number): { m: number; s: number } {
   const total = Math.max(0, Math.ceil(ms / 1000));
-  const m = Math.floor(total / 60);
-  const s = total % 60;
-  const parts: string[] = [];
-  if (m > 0) parts.push(`${m} minute${m === 1 ? '' : 's'}`);
-  if (s > 0 || m === 0) parts.push(`${s} second${s === 1 ? '' : 's'}`);
-  return `${parts.join(' ')} left`;
+  return { m: Math.floor(total / 60), s: total % 60 };
 }
 
-export function greeting(now: Date = new Date()): string {
+export function greetingKey(now: Date = new Date()): 'greetingMorning' | 'greetingAfternoon' | 'greetingEvening' {
   const h = now.getHours();
-  if (h < 12) return 'Good morning';
-  if (h < 17) return 'Good afternoon';
-  return 'Good evening';
+  if (h < 12) return 'greetingMorning';
+  if (h < 17) return 'greetingAfternoon';
+  return 'greetingEvening';
 }

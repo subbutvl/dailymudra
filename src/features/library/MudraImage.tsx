@@ -1,6 +1,8 @@
+import { useState } from 'react';
 import { StyleSheet, View, type DimensionValue } from 'react-native';
 
 import type { Mudra } from '@/content/mudras';
+import { useI18n } from '@/i18n/useI18n';
 import { useTheme } from '@/theme/useTheme';
 import { AppText } from '@/ui/AppText';
 
@@ -16,17 +18,23 @@ interface Props {
 
 /**
  * Placeholder gesture image (docs/SPEC.md §2.0): a surface panel with the
- * mudra's initial and a thin ring. Same size and alt text as the final art,
- * so swapping in real images changes no layout. Replace the inner content
- * with <Image source={...} /> from expo-image when the art lands.
+ * mudra's initial inside a thin ring that fills most of the panel. Same size
+ * and alt text as the final art, so swapping in real images changes no
+ * layout. Replace the inner content with <Image /> from expo-image later.
  */
 export function MudraImage({ mudra, size, height, dark, glyphSize = 56 }: Props) {
   const { color, radius } = useTheme();
+  const { mudra: text } = useI18n();
+  const [ring, setRing] = useState(0);
   return (
     <View
+      onLayout={(e) => {
+        const { width, height: h } = e.nativeEvent.layout;
+        setRing(Math.round(Math.min(width, h) * 0.82));
+      }}
       accessible
       accessibilityRole="image"
-      accessibilityLabel={mudra.imageAlt}
+      accessibilityLabel={text(mudra).imageAlt}
       style={[
         styles.panel,
         {
@@ -38,7 +46,7 @@ export function MudraImage({ mudra, size, height, dark, glyphSize = 56 }: Props)
         },
       ]}
     >
-      <View style={[styles.ring, { borderColor: dark ? color.nightMuted : color.accentMuted }]}>
+      <View style={[styles.ring, { width: ring, height: ring, opacity: ring ? 1 : 0, borderColor: dark ? color.nightMuted : color.accentMuted }]}>
         <AppText
           style={{
             fontFamily: 'Outfit_600SemiBold',
@@ -56,11 +64,9 @@ export function MudraImage({ mudra, size, height, dark, glyphSize = 56 }: Props)
 
 const styles = StyleSheet.create({
   panel: { alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  // Ring sized from the panel's shorter side (82%), so it is round in any panel shape.
   ring: {
-    width: '62%',
-    aspectRatio: 1,
-    maxWidth: 260,
-    borderRadius: 999,
+    borderRadius: 9999,
     borderWidth: 1.5,
     alignItems: 'center',
     justifyContent: 'center',

@@ -32,9 +32,18 @@ src/features/library/    mudra cards, intent chips, placeholder image, filtering
 src/features/session/    timer reducer + hook, breath cue, checkpoint, end notification
 src/features/progress/   SQLite session log, streaks, progress strip
 src/content/mudras.ts    the five bundled mudras
-src/theme/tokens.ts      colours (calm + vibrant palettes), type scale, spacing
+src/theme/tokens.ts      colours (calm + vibrant palettes, mandala pattern), type scale, spacing
+src/i18n/                English + Tamil strings and Tamil mudra content
 src/db/                  database open + migrations, kv-store helpers
 ```
+
+## Browser preview
+
+`npx expo start --web` opens a quick preview in the browser. It stores progress in localStorage instead of SQLite (`*.web.ts` files), so use a phone to test the real storage.
+
+## Languages
+
+English and Tamil live in `src/i18n/`. Add a key to `strings.ts` in both languages (a test checks they match). Settings → Language switches at runtime.
 
 ## Swapping things in
 

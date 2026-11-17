@@ -1,34 +1,37 @@
 import { StyleSheet, View } from 'react-native';
+import Animated, { FadeIn } from 'react-native-reanimated';
 
+import { useI18n } from '@/i18n/useI18n';
 import { useTheme } from '@/theme/useTheme';
 import { AppText } from '@/ui/AppText';
 import { useProgress } from './useProgress';
 
 export function ProgressStrip() {
   const { color, radius } = useTheme();
+  const { t } = useI18n();
   const { todayMin, streak, totalMin, sessionCount } = useProgress();
 
   if (sessionCount === 0) {
     return (
-      <View style={[styles.strip, { backgroundColor: color.surface, borderRadius: radius.card }]} accessible>
-        <AppText variant="bodyStrong">Your practice starts today</AppText>
-      </View>
+      <Animated.View entering={FadeIn.duration(400)} style={[styles.strip, { backgroundColor: color.surface, borderRadius: radius.card }]} accessible>
+        <AppText variant="bodyStrong">{t('startsToday')}</AppText>
+      </Animated.View>
     );
   }
 
-  const spoken = `${todayMin} minutes today, ${streak} day streak, ${totalMin} minutes total`;
   return (
-    <View
+    <Animated.View
+      entering={FadeIn.duration(400)}
       accessible
-      accessibilityLabel={spoken}
+      accessibilityLabel={t('progressSpoken', { today: todayMin, streak, total: totalMin })}
       style={[styles.strip, styles.row, { backgroundColor: color.surface, borderRadius: radius.card }]}
     >
-      <Stat value={`${todayMin}`} label="min today" />
+      <Stat value={`${todayMin}`} label={t('minToday')} />
       <View style={[styles.streak, { backgroundColor: color.warm, borderRadius: radius.pill }]}>
-        <Stat value={`${streak}`} label={streak === 1 ? 'day streak' : 'day streak'} />
+        <Stat value={`${streak}`} label={t('dayStreak')} />
       </View>
-      <Stat value={`${totalMin}`} label="min total" />
-    </View>
+      <Stat value={`${totalMin}`} label={t('minTotal')} />
+    </Animated.View>
   );
 }
 

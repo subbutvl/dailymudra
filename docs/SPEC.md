@@ -1,6 +1,6 @@
 # DailyMudra: Product Specification & UX Architecture
 
-**Status:** Draft v0.3 (wireframe decisions applied; app scaffolded) · **Platform:** Android first (React Native + Expo) · **Backend:** none, fully offline
+**Status:** Draft v0.4 (motion, mandala background and Tamil added) · **Platform:** Android first (React Native + Expo) · **Backend:** none, fully offline
 
 DailyMudra is a calm, distraction-free companion for practicing hand mudras. A person picks a mudra, reads how to form it, and practices for a set time with a quiet breath-pacing cue. The app remembers how many minutes they have practiced and how many days in a row.
 
@@ -8,8 +8,8 @@ DailyMudra is a calm, distraction-free companion for practicing hand mudras. A p
 
 | # | Constraint | How the spec honors it |
 |---|---|---|
-| C1 | No animation. Gestures are static images. | All gesture visuals are static WebP images. Screen transitions are off (`animation: 'none'`). The time-left label steps once per second; there is no dial. |
-| C1a | One exception: a soft looping breath-pacing cue on the Practice screen. | The breath cue is the **only** animated element in the app. It runs on the UI thread and falls back to a non-moving text cue when the system "Remove animations" setting is on. |
+| C1 | Gestures are static images; motion stays gentle. *(Revised in v0.4: the user asked for light transitions so the app feels lively.)* | Gesture images are static. Screens use short native transitions (slide, fade into Practice), lists fade up on entry, and the Detail card flips. All of it is skipped when Android's "Remove animations" is on. |
+| C1a | The only *looping* motion is the breath-pacing cue on the Practice screen. | The breath cue is the only continuous animation. It runs on the UI thread and falls back to a non-moving text cue when the system "Remove animations" setting is on. |
 | C2 | Exactly 5 bundled mudras: Gyan, Prana, Apana, Vayu, Shunya. | Mudra content is a typed, read-only module compiled into the app. No downloads, no CMS. |
 | C3 | High performance, accessible, clean, distraction-free. | No network, no analytics, no ads, no sign-in. TalkBack and font scaling are first-class requirements (see §1.4). |
 | C4 | Self-contained, no external backend. | All state lives on device in SQLite (§3.3). |
@@ -188,7 +188,7 @@ Queries run once at app start and after each saved session, then cached in a sma
 - Text uses `sp` scaling and layouts are tested at 200% system font size. No truncated essential text.
 - Contrast: body text ≥ 4.5:1, large text and UI glyphs ≥ 3:1, in both light screens and the dark Practice screen.
 - Countdown announcements: the time label is **not** a live region every second (that would be noisy). TalkBack hears remaining time when focused, plus a polite announcement at each whole minute and at completion.
-- Breath cue honors **Remove animations** (`useReducedMotion`): it becomes a still circle with the words "Inhale" / "Exhale" changing on the same rhythm, plus optional haptic taps.
+- Breath cue honors **Remove animations** (`useReducedMotion`): the disc stays still. With no on-screen words (v0.4), the optional haptic breath taps are the pacing cue for these users.
 - Colour is never the only signal (the selected chip also gets a check mark and `accessibilityState.selected`).
 
 **Performance budgets**
@@ -221,6 +221,10 @@ Queries run once at app start and after each saved session, then cached in a sma
 | `color.nightText` | `#E2DFDA` | Timer digits and text on Practice (`bg` reused). |
 
 **Palette variants.** All colours live in `src/theme/tokens.ts` as two palettes with the same token names: `calm` (this table, the default) and `vibrant` (cream `#F3EDE0`, mint `#B4E4C9`, emerald `#156B4F`, sage `#4E9A7C`, gold `#E2B84A`, ink `#10261E`, inkMuted `#3C5249`, night `#0B3A2D`, nightSurface `#0F4A39`). Settings → Appearance switches between them so both can be judged on a device. The final choice is still open.
+
+**Background pattern (v0.4).** Every screen draws a faint static line mandala (react-native-svg) behind its content, never on cards: two partial mandalas, top-right and bottom-left. Colour and opacity are palette tokens (`pattern`, `patternOpacity`, plus night variants); Calm uses the accent at 8%, Vibrant uses gold.
+
+**Language (v0.4).** English and Tamil. Strings live in `src/i18n/` (UI strings plus Tamil mudra content); the first launch follows the device language and Settings → Language switches it. Outfit/Geist have no Tamil glyphs, so Tamil renders in the system Tamil font with 1.3× line height. Tamil copy needs a native-speaker review before release.
 
 The app stays **light everywhere except the Practice screen**, which is always dark. It does not follow system dark mode in v1 (tokens are structured so a dark theme can be added later).
 
@@ -355,7 +359,8 @@ Routes (expo-router): `/` Home, `/mudra/[id]` Detail, `/practice/[id]` Practice 
 └────────────────────────────────────┘
 ```
 
-- Tapping the card or the "How to form it" link flips it. Per C1 the flip is an **instant face swap**, not a rotation.
+- Tapping the image or the "How to form it" link flips the card with a 450 ms 3D turn (instant with reduce-motion). The card keeps its square size; long steps scroll **inside** the card.
+- Element pills stay on **one line** and scroll horizontally when there are more than fit.
 - Duration choice is remembered per mudra. Notification permission is asked on the first **Start practice**.
 
 ### 2.4 Active Practice (dark, eyes-open)
@@ -373,20 +378,19 @@ Practice is eyes-open: the person must **see** the gesture, so the image is the 
 │ │                                │ │
 │ │                                │ │
 │ └────────────────────────────────┘ │
-│  ◯  Inhale                         │  small breath circle (56dp) + phase word
-│  08:42 left            [❚❚ Pause]  │  subtle time-left label + pause/play
+│  ◯   08:42 left              (❚❚)  │  breath ring · time left · round pause/play
 └────────────────────────────────────┘
 ```
 
-- **Breath cue (decided):** a small soft circle, *inhale 4 s → exhale 6 s*, looping, the same for all 5 mudras. Scales 0.6 → 1.0 with an ease-in-out curve, filled `surface` at 0.35 to 0.6 opacity. With "Remove animations" on it is a still circle and only the word changes.
+- **Breath cue (decided):** a soft disc pulsing inside a thin 64dp ring, *inhale 4 s → exhale 6 s*, looping, the same for all 5 mudras. **No Inhale/Exhale text** (v0.4). With "Remove animations" on the disc stays still. TalkBack reads "Breathing guide: in for 4 seconds, out for 6".
+- The gesture placeholder takes all the height the compact control row leaves (about three quarters of the screen).
 - The time label is muted (`nightMuted`), tabular figures, and is not a live region; TalkBack hears "8 minutes 42 seconds left" on focus plus a polite announcement each whole minute.
 - "Show gesture image in practice" can be turned off in Settings for those who know the pose.
 - Nothing else moves. No progress percentages, no quotes, no streak reminders during practice.
 
 **Paused**
 ```
-│  ◯  Paused                         │  breath circle still
-│  08:42 left     [End] [▶ Resume]   │  Resume = primary, End = secondary
+│  ◯   08:42 left         (■)  (▶)   │  disc still; End (outline) + Resume (filled)
 ```
 The app never pauses on its own (see §1.2), so "Paused" only ever follows the person's own tap.
 
@@ -585,6 +589,7 @@ Assumptions made where the answers were silent (easy to change):
 
 ## Changelog
 
+- **v0.4** – Gentle transitions (C1 revised), animated flip, one-line scrolling element pills, breath ring without text, taller gesture placeholder, safe areas on every screen, steps scroll inside the card, mandala background, English + Tamil.
 - **v0.3** – Detail is a flip card (instant swap). Practice puts the gesture image first (~70% of the screen) with a small breath circle, a subtle time-left label and pause/play; the dial is dropped. Calm and vibrant palettes both live in theme tokens. Routes moved to `src/app/` (Expo SDK 58 default).
 - **v0.2** – Applied kickoff decisions. Timer no longer auto-pauses; added end notification, chime, clock-change guard (wall vs monotonic), 15 s checkpoints and background-kill recovery (from review on PR #1). Added design tokens, contrast table and placeholder spec.
 - **v0.1** – Initial spec, wireframes and plan.
