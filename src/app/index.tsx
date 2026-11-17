@@ -40,12 +40,16 @@ export default function Home() {
 
   return (
     <Screen>
-      <ScrollView contentContainerStyle={{ paddingBottom: space.xxxl }}>
+      {/* Sticky top: title, greeting, progress and filters stay put. */}
+      <View style={{ paddingBottom: space.md }}>
         <View style={[styles.header, { paddingHorizontal: space.gutter }]}>
           <AppText variant="h1" accessibilityRole="header">
             DailyMudra
           </AppText>
-          <IconButton glyph="⚙" label={t('settings')} color={color.accent} onPress={() => router.push('/settings')} />
+          <View style={styles.headerIcons}>
+            <IconButton glyph="?" label={t('help')} color={color.accent} onPress={() => router.push('/help')} />
+            <IconButton glyph="⚙" label={t('settings')} color={color.accent} onPress={() => router.push('/settings')} />
+          </View>
         </View>
 
         <View style={{ paddingHorizontal: space.gutter, gap: space.sm }}>
@@ -53,23 +57,24 @@ export default function Home() {
           <ProgressStrip />
         </View>
 
-        <View style={{ marginVertical: space.xl }}>
+        <View style={{ marginTop: space.lg }}>
           <IntentChips value={intent} onChange={(next) => setSettings({ homeIntent: next })} />
         </View>
+      </View>
 
-        <View style={{ paddingHorizontal: space.gutter, gap: space.md }}>
-          {list.length === 0 && <AppText muted>{t('noMudras')}</AppText>}
-          {intent === 'all'
-            ? groupByPrimaryIntent(list).map((g) => (
-                <View key={g.intent} style={{ gap: space.sm, marginBottom: space.sm }}>
-                  <AppText variant="overline" muted accessibilityRole="header">
-                    {intentText(g.intent).heading}
-                  </AppText>
-                  {g.mudras.map(card)}
-                </View>
-              ))
-            : list.map(card)}
-        </View>
+      {/* Only the mudra list scrolls. */}
+      <ScrollView contentContainerStyle={{ paddingHorizontal: space.gutter, paddingTop: space.sm, paddingBottom: space.xxxl, gap: space.md }}>
+        {list.length === 0 && <AppText muted>{t('noMudras')}</AppText>}
+        {intent === 'all'
+          ? groupByPrimaryIntent(list).map((g) => (
+              <View key={g.intent} style={{ gap: space.sm, marginBottom: space.sm }}>
+                <AppText variant="overline" muted accessibilityRole="header">
+                  {intentText(g.intent).heading}
+                </AppText>
+                {g.mudras.map(card)}
+              </View>
+            ))
+          : list.map(card)}
       </ScrollView>
     </Screen>
   );
@@ -77,4 +82,5 @@ export default function Home() {
 
 const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 8, paddingBottom: 8 },
+  headerIcons: { flexDirection: 'row', alignItems: 'center' },
 });

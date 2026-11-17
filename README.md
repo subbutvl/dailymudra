@@ -44,6 +44,7 @@ src/db/                  database open + migrations, kv-store helpers
 ## Languages
 
 English and Tamil live in `src/i18n/`. Add a key to `strings.ts` in both languages (a test checks they match). Settings → Language switches at runtime.
+Help and wiki copy (How to, When to, per-mudra notes) lives in `src/content/help.ts`, also in both languages.
 
 ## Swapping things in
 

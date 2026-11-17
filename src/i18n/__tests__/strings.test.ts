@@ -1,3 +1,4 @@
+import { HOW_TO, WHEN_TO, WIKI } from '@/content/help';
 import { INTENTS, MUDRAS } from '@/content/mudras';
 import { MUDRAS_TA, INTENTS_TA } from '../mudras.ta';
 import { format, STRINGS, translate } from '../strings';
@@ -27,5 +28,19 @@ describe('i18n', () => {
     expect(format('{n} of {name}', { n: 5, name: 'Gyan' })).toBe('5 of Gyan');
     expect(format('{missing}')).toBe('{missing}');
     expect(translate('en', 'timeLeft', { time: '08:42' })).toBe('08:42 left');
+  });
+});
+
+
+describe('help content', () => {
+  it('has the same shape in English and Tamil', () => {
+    for (const src of [HOW_TO, WHEN_TO]) {
+      expect(src.ta.map((s) => s.items.length)).toEqual(src.en.map((s) => s.items.length));
+    }
+    for (const m of MUDRAS) {
+      for (const lang of ['en', 'ta'] as const) {
+        for (const v of Object.values(WIKI[lang][m.id])) expect(v.trim().length).toBeGreaterThan(0);
+      }
+    }
   });
 });
