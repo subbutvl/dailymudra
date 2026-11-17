@@ -1,0 +1,48 @@
+{
+  "expo": {
+    "name": "DailyMudra",
+    "slug": "dailymudra",
+    "scheme": "dailymudra",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "backgroundColor": "#E2DFDA",
+    "ios": {
+      "supportsTablet": false
+    },
+    "android": {
+      "package": "com.dailymudra.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#CBDED3",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-sqlite",
+      "expo-font",
+      "expo-image",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 120,
+          "backgroundColor": "#E2DFDA"
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#3B6255"
+        }
+      ]
+    ]
+  }
+}
